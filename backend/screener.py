@@ -437,3 +437,69 @@ def options_strategy(ticker, outlook="bullish", risk="moderate"):
     except Exception:
         explain = None
     return {"ticker": ticker.upper(), "outlook": outlook, "risk": rk, "price": price, "strategy": pick, "explanation": explain}
+
+
+# ── Congress Radar: U.S. House stock-trade disclosures (STOCK Act PTRs) ──────────
+# Free + no key: the House Clerk publishes a yearly ZIP whose XML indexes every
+# filing. FilingType "P" = Periodic Transaction Report = a member disclosing a
+# securities trade. Filing-level (member + date + link to the actual PDF); the
+# ticker/amount detail lives inside each PDF. Disclosed, lagged, informational.
+_CONGRESS = {"data": None, "ts": 0.0}
+
+
+def _house_ptr_filings():
+    import io, time, zipfile
+    import xml.etree.ElementTree as ET
+    from datetime import datetime
+    import requests
+    if _CONGRESS["data"] is not None and (time.time() - _CONGRESS["ts"]) < 6 * 3600:
+        return _CONGRESS["data"]
+    year = datetime.now().year
+    url = f"https://disclosures-clerk.house.gov/public_disc/financial-pdfs/{year}FD.zip"
+    r = requests.get(url, timeout=25, headers={"User-Agent": "Mozilla/5.0 Chrome/124"})
+    r.raise_for_status()
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    xmlname = next(n for n in z.namelist() if n.endswith(".xml"))
+    root = ET.fromstring(z.read(xmlname))
+    rows = []
+    today = datetime.now()
+    for m in root.findall(".//Member"):
+        if (m.findtext("FilingType") or "") != "P":
+            continue
+        first = (m.findtext("First") or "").strip()
+        last = (m.findtext("Last") or "").strip()
+        doc = (m.findtext("DocID") or "").strip()
+        fd = (m.findtext("FilingDate") or "").strip()
+        try:
+            dt = datetime.strptime(fd, "%m/%d/%Y")
+            days_ago = (today - dt).days
+        except Exception:
+            dt, days_ago = datetime.min, None
+        rows.append({
+            "name": f"{first} {last}".strip(),
+            "state": m.findtext("StateDst") or "",
+            "filed": fd,
+            "filed_days_ago": days_ago,
+            "doc_id": doc,
+            "pdf_url": f"https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/{year}/{doc}.pdf",
+            "_sort": dt,
+        })
+    rows.sort(key=lambda x: x["_sort"], reverse=True)
+    for x in rows:
+        x.pop("_sort", None)
+    _CONGRESS["data"] = rows
+    _CONGRESS["ts"] = time.time()
+    return rows
+
+
+def congress_trades(limit=25, member=""):
+    """Recent U.S. House securities-trade disclosures (free, no key). member filters by name."""
+    try:
+        rows = _house_ptr_filings()
+    except Exception as e:
+        return {"error": f"House disclosure fetch failed: {type(e).__name__}", "filings": []}
+    if member:
+        ml = member.lower()
+        rows = [r for r in rows if ml in r["name"].lower()]
+    return {"count": len(rows), "filings": rows[:limit],
+            "source": "U.S. House Clerk — Periodic Transaction Reports (STOCK Act)"}

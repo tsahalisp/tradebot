@@ -105,6 +105,12 @@ def get_options(ticker: str, outlook: str = "bullish", risk: str = "moderate"):
     return screener.options_strategy(ticker.upper(), outlook, risk)
 
 
+@app.get("/congress")
+def get_congress(limit: int = 25, member: str = ""):
+    import screener
+    return screener.congress_trades(limit, member)
+
+
 @app.post("/holdings/remove")
 def remove_holding(ticker: str):
     import holdings
