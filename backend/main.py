@@ -147,6 +147,30 @@ def get_conviction_attribution():
     return conviction.attribution()
 
 
+@app.get("/portfolio/summary")
+def get_portfolio_summary():
+    import autoportfolio
+    return autoportfolio.summary()
+
+
+@app.get("/portfolio/status")
+def get_portfolio_status(book: str = "core"):
+    import autoportfolio
+    return autoportfolio.status(book)
+
+
+@app.post("/portfolio/tick")
+def post_portfolio_tick():
+    import autoportfolio
+    return autoportfolio.tick()
+
+
+@app.post("/portfolio/rebalance")
+def post_portfolio_rebalance(book: str):
+    import autoportfolio
+    return autoportfolio.rebalance(book)
+
+
 @app.post("/holdings/remove")
 def remove_holding(ticker: str):
     import holdings
