@@ -8,6 +8,12 @@ this never places a real order; it moves virtual cash in a local SQLite book.
 """
 import os, time, sqlite3, json
 import datasource, conviction
+try:
+    import resource
+    _soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (max(_soft, min(_hard, 10240)), _hard))
+except Exception:
+    pass
 
 DB = os.path.expanduser("~/.tradebot/portfolio.db")
 START_CASH = 100000.0
@@ -166,10 +172,12 @@ def rebalance(book):
                 trade(tk, "SELL", p["shares"], px, "dropped from targets")
                 c.execute("UPDATE positions SET shares=0 WHERE book=? AND ticker=?", (book, tk))
     # 2) move each target toward its slot
+    bought = 0
     for tk in targets:
         px = _price(tk)
         if not px:
             continue
+        bought += 1
         cur = pos.get(tk, {}).get("shares", 0.0)
         want = slot / px
         diff = want - cur
@@ -184,6 +192,11 @@ def rebalance(book):
                   "ON CONFLICT(book,ticker) DO UPDATE SET shares=excluded.shares, avg_cost=excluded.avg_cost",
                   (book, tk, want, px))
 
+    if targets and bought == 0:
+        # scored fine but could not price/buy a single target (data throttled) -> don't lock; retry next tick
+        return {"book": book, "rebalanced": False,
+                "reason": "scored but could not price any target (data throttled) — will retry next tick",
+                "universe": len(uni), "scored": len(scores)}
     c.execute("UPDATE books SET cash=?, last_rebal=? WHERE name=?", (cash, now, book))
     c.commit()
     mark(book)
