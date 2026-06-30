@@ -117,6 +117,36 @@ def get_congress_filing(doc_id: str, year: int = 0):
     return screener.parse_filing(doc_id, year or None)
 
 
+@app.get("/conviction")
+def get_conviction(ticker: str):
+    import conviction
+    return conviction.conviction_score(ticker.upper())
+
+
+@app.post("/conviction/log")
+def post_conviction_log(ticker: str):
+    import conviction
+    return conviction.log_pick(ticker.upper())
+
+
+@app.get("/conviction/ledger")
+def get_conviction_ledger(limit: int = 100):
+    import conviction
+    return conviction.ledger(limit)
+
+
+@app.post("/conviction/settle")
+def post_conviction_settle(min_days: int = 30):
+    import conviction
+    return conviction.settle(min_days)
+
+
+@app.get("/conviction/attribution")
+def get_conviction_attribution():
+    import conviction
+    return conviction.attribution()
+
+
 @app.post("/holdings/remove")
 def remove_holding(ticker: str):
     import holdings
