@@ -129,10 +129,10 @@ def rebalance(book):
     uni = universe_for(book)
     scores = {}
     for t in uni:
-        s = score_one(t)
-        if s is not None and _price(t):
-            scores[t] = s
-        time.sleep(0.4)  # be polite to yfinance
+        sc = score_one(t)
+        if sc is not None:
+            scores[t] = sc          # price only the TARGETS later, not the whole universe
+        time.sleep(0.3)  # be polite to yfinance
     if not scores:
         # every score failed (data service throttled/unreachable) -> do NOT set last_rebal,
         # leave the book as-is so the next tick retries instead of locking it to cash.
