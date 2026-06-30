@@ -111,6 +111,12 @@ def get_congress(limit: int = 25, member: str = ""):
     return screener.congress_trades(limit, member)
 
 
+@app.get("/congress/filing")
+def get_congress_filing(doc_id: str, year: int = 0):
+    import screener
+    return screener.parse_filing(doc_id, year or None)
+
+
 @app.post("/holdings/remove")
 def remove_holding(ticker: str):
     import holdings

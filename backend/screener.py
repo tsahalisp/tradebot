@@ -503,3 +503,80 @@ def congress_trades(limit=25, member=""):
         rows = [r for r in rows if ml in r["name"].lower()]
     return {"count": len(rows), "filings": rows[:limit],
             "source": "U.S. House Clerk — Periodic Transaction Reports (STOCK Act)"}
+
+
+# --- PTR PDF parser: pull tickers/amounts out of a single filing on demand ---
+_PTR_CACHE = {}  # doc_id -> parsed result
+_PTR_TYPE = {"P": "Purchase", "S": "Sale", "S (partial)": "Partial Sale", "E": "Exchange"}
+_PTR_OWNER = {"SP": "Spouse", "DC": "Child", "JT": "Joint"}
+
+
+def _parse_ptr_pdf(pdf_bytes):
+    import re, io
+    from pypdf import PdfReader
+    tick_re = re.compile(r"\(([A-Z][A-Z.]{0,5})\)\s*\[[A-Za-z]{1,4}\]")
+    txl_re = re.compile(r"^(S \(partial\)|P|S|E)\s+(\d{2}/\d{2}/\d{4})(\d{2}/\d{2}/\d{4})\$([\d,]+)\s*-\s*\$([\d,]+)")
+    clean = lambda s: re.sub(r"\s+", " ", s).strip(" -.,")
+    lines = []
+    for p in PdfReader(io.BytesIO(pdf_bytes)).pages:
+        for ln in (p.extract_text() or "").split("\n"):
+            ln = ln.strip()
+            if ln:
+                lines.append(ln)
+    out = []
+    for i, ln in enumerate(lines):
+        mt = tick_re.search(ln)
+        if not mt:
+            continue
+        tx = None
+        for j in range(i + 1, min(i + 3, len(lines))):
+            cand = lines[j] + " " + (lines[j + 1] if j + 1 < len(lines) else "")
+            tx = txl_re.match(cand)
+            if tx:
+                break
+        if not tx:
+            continue
+        head = ln[:mt.start()].strip()
+        parts = [head] if head else []
+        k = i - 1
+        while k >= 0 and len(parts) < 3:
+            pl = lines[k]
+            if (":" in pl) or txl_re.match(pl) or tick_re.search(pl) or not re.match(r"^[A-Za-z0-9]", pl):
+                break
+            parts.insert(0, pl)
+            k -= 1
+        asset = clean(" ".join(parts))
+        owner = "Self"
+        mo = re.match(r"^(SP|DC|JT)\s+(.*)", asset)
+        if mo:
+            owner = _PTR_OWNER[mo.group(1)]
+            asset = clean(mo.group(2))
+        typ, d1, d2, lo, hi = tx.groups()
+        out.append({"owner": owner, "ticker": mt.group(1), "asset": asset[:70],
+                    "type": _PTR_TYPE.get(typ, typ), "date": d1, "amount": f"${lo} - ${hi}"})
+    return out
+
+
+def parse_filing(doc_id, year=None):
+    """Download one House PTR PDF and extract its stock transactions (ticker/type/amount)."""
+    import time as _t
+    from datetime import datetime
+    import requests
+    doc_id = str(doc_id).strip()
+    if not doc_id.isdigit():
+        return {"error": "bad doc_id", "transactions": []}
+    if doc_id in _PTR_CACHE:
+        return _PTR_CACHE[doc_id]
+    year = year or datetime.now().year
+    url = f"https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/{year}/{doc_id}.pdf"
+    try:
+        b = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0 Chrome/124"}).content
+        txns = _parse_ptr_pdf(b)
+        note = "" if txns else "No tickered stock trades found (may be bonds/funds, or a scanned image)."
+        res = {"doc_id": doc_id, "count": len(txns), "transactions": txns,
+               "pdf_url": url, "note": note}
+    except Exception as e:
+        res = {"doc_id": doc_id, "error": f"{type(e).__name__}", "transactions": [], "pdf_url": url}
+    _PTR_CACHE[doc_id] = res
+    return res
+
