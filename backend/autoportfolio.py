@@ -133,6 +133,12 @@ def rebalance(book):
         if s is not None and _price(t):
             scores[t] = s
         time.sleep(0.4)  # be polite to yfinance
+    if not scores:
+        # every score failed (data service throttled/unreachable) -> do NOT set last_rebal,
+        # leave the book as-is so the next tick retries instead of locking it to cash.
+        return {"book": book, "rebalanced": False,
+                "reason": "no scores available (data service throttled) — will retry next tick",
+                "universe": len(uni)}
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     targets = [t for t, s in ranked if s >= MIN_CONV][:N]
 
@@ -201,9 +207,12 @@ def tick():
         union = set()
         for n in due:
             union |= set(universe_for(n))
-        for t in sorted(union):
+        import gc
+        for i, t in enumerate(sorted(union)):
             score_one(t)
             time.sleep(0.4)
+            if i % 15 == 14:
+                gc.collect(); time.sleep(3)  # release threads/sockets, avoid resource exhaustion
     out = {"marked": [], "rebalanced": []}
     for n in names:
         if n in due:
