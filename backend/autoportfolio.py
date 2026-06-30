@@ -13,7 +13,7 @@ DB = os.path.expanduser("~/.tradebot/portfolio.db")
 START_CASH = 100000.0
 N = 10                 # target positions
 FEE_BPS = 0.0005       # 5 bps per trade = commission + slippage
-MIN_CONV = 50.0        # don't buy "Avoid" names
+MIN_CONV = 45.0        # exclude only genuine "Avoid" (<45); take the best N of the rest
 REBAL_DAYS = 7         # weekly
 
 MEGACAP_CORE = [
@@ -33,9 +33,33 @@ def _price(ticker):
         return None
 
 
+_SCORE_CACHE = {}  # ticker -> (ts, conviction|None); shared across books within a tick
+
+
+def score_one(t):
+    import time
+    e = _SCORE_CACHE.get(t)
+    if e and (time.time() - e[0]) < 2 * 3600:
+        return e[1]
+    val = None
+    for attempt in range(2):
+        try:
+            r = conviction.conviction_score(t)
+            if not r.get("error") and r.get("conviction") is not None:
+                val = r["conviction"]
+                break
+        except Exception:
+            pass
+        time.sleep(3)  # back off (yfinance throttles at volume)
+    _SCORE_CACHE[t] = (time.time(), val)
+    return val
+
+
 def _db():
     os.makedirs(os.path.dirname(DB), exist_ok=True)
-    c = sqlite3.connect(DB)
+    c = sqlite3.connect(DB, timeout=30)
+    c.execute("PRAGMA journal_mode=WAL")      # concurrent reader (app) + writer (cron)
+    c.execute("PRAGMA busy_timeout=30000")    # wait, don't error, on a brief lock
     c.execute("""CREATE TABLE IF NOT EXISTS books(
         name TEXT PRIMARY KEY, cash REAL, created REAL, universe TEXT,
         last_rebal REAL, spy0 REAL)""")
@@ -101,15 +125,14 @@ def mark(book):
 
 def rebalance(book):
     c = _db()
+    import time
     uni = universe_for(book)
     scores = {}
     for t in uni:
-        try:
-            r = conviction.conviction_score(t)
-            if not r.get("error") and r.get("conviction") is not None and _price(t):
-                scores[t] = r["conviction"]
-        except Exception:
-            continue
+        s = score_one(t)
+        if s is not None and _price(t):
+            scores[t] = s
+        time.sleep(0.4)  # be polite to yfinance
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     targets = [t for t, s in ranked if s >= MIN_CONV][:N]
 
@@ -163,16 +186,30 @@ def rebalance(book):
 
 
 def tick():
-    """Daily: mark every book; rebalance any book due (>=7d since last / never)."""
+    """Daily: mark every book; rebalance any book due (>=7d since last / never).
+    Warms a shared score cache over the union of due books so we score each
+    unique ticker once (congress is a subset of core) and stay under yfinance limits."""
+    import time
     ensure_books()
     c = _db()
+    names = [n for (n,) in c.execute("SELECT name FROM books").fetchall()]
+    def _due(n):
+        lr = c.execute("SELECT last_rebal FROM books WHERE name=?", (n,)).fetchone()[0]
+        return lr is None or (time.time() - lr) >= REBAL_DAYS * 86400
+    due = [n for n in names if _due(n)]
+    if due:
+        union = set()
+        for n in due:
+            union |= set(universe_for(n))
+        for t in sorted(union):
+            score_one(t)
+            time.sleep(0.4)
     out = {"marked": [], "rebalanced": []}
-    for (name,) in c.execute("SELECT name FROM books").fetchall():
-        lr = c.execute("SELECT last_rebal FROM books WHERE name=?", (name,)).fetchone()[0]
-        if lr is None or (time.time() - lr) >= REBAL_DAYS * 86400:
-            out["rebalanced"].append(rebalance(name))
+    for n in names:
+        if n in due:
+            out["rebalanced"].append(rebalance(n))
         else:
-            out["marked"].append(mark(name))
+            out["marked"].append(mark(n))
     return out
 
 
