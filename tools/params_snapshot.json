@@ -1,0 +1,88 @@
+{
+  "congress": {
+    "fields": {
+      "backend/autoportfolio.py:FEE_BPS": 0.0005,
+      "backend/autoportfolio.py:MIN_CONV": 45.0,
+      "backend/autoportfolio.py:N": 10,
+      "backend/autoportfolio.py:REBAL_DAYS": 7,
+      "backend/autoportfolio.py:START_CASH": 100000.0,
+      "backend/autoportfolio.py:fn:_congress_buys": "11c7dc400d4a2b3e",
+      "backend/autoportfolio.py:fn:rebalance": "0627a9b1f0140dcf",
+      "backend/autoportfolio.py:fn:universe_for": "527a03d9dc2e2f2b",
+      "backend/conviction.py:WEIGHTS": {
+        "congress": 1,
+        "dcf": 1,
+        "earnings": 1,
+        "insider": 1,
+        "news": 1,
+        "scorecard": 1
+      },
+      "universe_rule": "congress-only"
+    },
+    "hash": "79d659ffa3465bd51af36c6a2a1bc453787bd1f03494ee9ffbbe410083866768"
+  },
+  "core": {
+    "fields": {
+      "backend/autoportfolio.py:FEE_BPS": 0.0005,
+      "backend/autoportfolio.py:MEGACAP_CORE": [
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "GOOGL",
+        "AMZN",
+        "META",
+        "AVGO",
+        "ORCL",
+        "CRM",
+        "AMD",
+        "ADBE",
+        "CSCO",
+        "TSLA",
+        "HD",
+        "MCD",
+        "NKE",
+        "SBUX",
+        "COST",
+        "WMT",
+        "PG",
+        "KO",
+        "PEP",
+        "UNH",
+        "JNJ",
+        "LLY",
+        "ABBV",
+        "MRK",
+        "PFE",
+        "JPM",
+        "BAC",
+        "V",
+        "MA",
+        "GS",
+        "CAT",
+        "BA",
+        "XOM",
+        "CVX",
+        "GE",
+        "NFLX",
+        "DIS"
+      ],
+      "backend/autoportfolio.py:MIN_CONV": 45.0,
+      "backend/autoportfolio.py:N": 10,
+      "backend/autoportfolio.py:REBAL_DAYS": 7,
+      "backend/autoportfolio.py:START_CASH": 100000.0,
+      "backend/autoportfolio.py:fn:_congress_buys": "11c7dc400d4a2b3e",
+      "backend/autoportfolio.py:fn:rebalance": "0627a9b1f0140dcf",
+      "backend/autoportfolio.py:fn:universe_for": "527a03d9dc2e2f2b",
+      "backend/conviction.py:WEIGHTS": {
+        "congress": 1,
+        "dcf": 1,
+        "earnings": 1,
+        "insider": 1,
+        "news": 1,
+        "scorecard": 1
+      },
+      "universe_rule": "megacap+congress"
+    },
+    "hash": "e5327af14eb3e8dbdcb6928d8ea58569214e08e1e4b37c25057bb905bb42d5fc"
+  }
+}
